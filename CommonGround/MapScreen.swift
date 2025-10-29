@@ -186,61 +186,108 @@ struct MapReaderView: View {
     @State private var position: MapCameraPosition = .automatic
 
     var body: some View {
-        Map(position: $position) {
-            // User's location blue dot
-            UserAnnotation()
+        ZStack {
+            Map(position: $position) {
+                // User's location blue dot
+                UserAnnotation()
 
-            // Pins for each returned place
-            ForEach(places) { place in
-                Annotation(place.name,
-                           coordinate: place.coordinate,
-                           anchor: .bottom) {
+                // Pins for each returned place
+                ForEach(places) { place in
+                    Annotation(place.name,
+                               coordinate: place.coordinate,
+                               anchor: .bottom) {
 
-                    Button {
-                        onSelect(place)
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: "mappin.circle.fill")
-                                .font(.title2)
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.red, .white)
+                        Button {
+                            onSelect(place)
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "mappin.circle.fill")
+                                    .font(.title2)
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.red, .white)
 
-                            Text(shortName(place.name))
-                                .font(.caption2)
-                                .padding(4)
-                                .background(.ultraThinMaterial)
-                                .clipShape(
-                                    RoundedRectangle(
-                                        cornerRadius: 6,
-                                        style: .continuous
+                                Text(shortName(place.name))
+                                    .font(.caption2)
+                                    .padding(4)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(
+                                        RoundedRectangle(
+                                            cornerRadius: 6,
+                                            style: .continuous
+                                        )
                                     )
-                                )
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
-        }
-        .onAppear {
-            if !didSetInitialCamera {
-                print("🗺 Setting initial camera around user at \(userCoordinate.latitude), \(userCoordinate.longitude)")
-                position = .region(
-                    MKCoordinateRegion(
-                        center: userCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+            .onAppear {
+                if !didSetInitialCamera {
+                    print("🗺 Setting initial camera around user at \(userCoordinate.latitude), \(userCoordinate.longitude)")
+                    position = .region(
+                        MKCoordinateRegion(
+                            center: userCoordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                        )
                     )
-                )
-                didSetInitialCamera = true
+                    didSetInitialCamera = true
+                }
             }
-        }
-        .onMapCameraChange { context in
-            let center = context.region.center
-            let span = context.region.span
-            region = MKCoordinateRegion(center: center, span: span)
-        }
-        .mapControls {
-            MapUserLocationButton()
-            MapCompass()
+            .onMapCameraChange { context in
+                let center = context.region.center
+                let span = context.region.span
+                region = MKCoordinateRegion(center: center, span: span)
+            }
+
+            // CUSTOM FLOATING CONTROLS OVERLAY
+            VStack {
+                HStack {
+                    Spacer()
+
+                    VStack(spacing: 12) {
+                        // recenter button
+                        Button {
+                            // animate camera back to user
+                            withAnimation(.easeInOut(duration: 0.25)) {
+                                position = .region(
+                                    MKCoordinateRegion(
+                                        center: userCoordinate,
+                                        span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
+                                    )
+                                )
+                            }
+                        } label: {
+                            Image(systemName: "location.fill")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .padding(12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                .strokeBorder(
+                                                    Color.white.opacity(0.4),
+                                                    lineWidth: 1
+                                                )
+                                        )
+                                )
+                        }
+                        .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 8)
+
+                        // compass from MapKit, but styled-floating
+                        MapCompass()
+                            .mapControlVisibility(.visible) // make sure compass is active
+                    }
+                    // tweak these paddings to move the stack where you want
+                    .padding(.top, 60)      // <- lower this number to push it DOWN
+                    .padding(.trailing, 16) // <- space from right edge
+                }
+
+                Spacer()
+            }
+            .allowsHitTesting(true)
         }
     }
 
@@ -255,15 +302,17 @@ struct MapReaderView: View {
 }
 
 
-// MARK: - Bottom overlay panel (liquid glass style)
+// MARK: - Bottom overlay panel (liquid glass style with fixed rounded corners)
 
 struct BottomGlassPanel: View {
     let selectedPlace: CommunityPlace?
     let isExpanded: Bool
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private let cornerRadius: CGFloat = 28
 
+    var body: some View {
+        // Content inside the bubble
+        let content = VStack(alignment: .leading, spacing: 10) {
             // If the sheet is up AND we have a selected place, show that place.
             // Otherwise, show the generic helper text.
             if isExpanded, let place = selectedPlace {
@@ -287,28 +336,33 @@ struct BottomGlassPanel: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
-        .frame(maxWidth: .infinity)
-        .background(
-            // Frosted / liquid glass card
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(.ultraThinMaterial)
-                // pearly highlight layer
-                .overlay(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.45),
-                            Color.white.opacity(0.05),
-                            Color.white.opacity(0.0)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                    .blendMode(.screen)
-                    .opacity(0.6)
-                )
-                // subtle border / edge glow
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+
+        content
+            .frame(maxWidth: .infinity)
+            .background(
+                ZStack {
+                    // frosted base
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(.ultraThinMaterial)
+
+                    // pearly highlight layer
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.45),
+                                    Color.white.opacity(0.05),
+                                    Color.white.opacity(0.0)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.screen)
+                        .opacity(0.6)
+
+                    // subtle border / rim light
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .strokeBorder(
                             LinearGradient(
                                 colors: [
@@ -321,16 +375,20 @@ struct BottomGlassPanel: View {
                             lineWidth: 1
                         )
                         .opacity(0.8)
-                )
-        )
-        // lift off the map
-        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 16)
-        .padding(.horizontal)
-        .padding(.bottom, 16)
-        .frame(maxHeight: .infinity, alignment: .bottom)
-        // tiny "alive" scale bump when expanded
-        .scaleEffect(isExpanded ? 1.02 : 1.0)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isExpanded)
+                }
+            )
+            // hard clip to the same radius so we don't get that weird square edge
+            .clipShape(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            )
+            // lift off the map
+            .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 16)
+            .padding(.horizontal)
+            .padding(.bottom, 16)
+            .frame(maxHeight: .infinity, alignment: .bottom)
+            // tiny "alive" scale bump when expanded
+            .scaleEffect(isExpanded ? 1.02 : 1.0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isExpanded)
     }
 }
 
