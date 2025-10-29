@@ -64,7 +64,7 @@ struct OnboardingView: View {
                 // Continue button
                 Button {
                     // mark onboarding as done
-                    hasSeenOnboarding = true
+                    hasSeenOnboarding = false
                 } label: {
                     Text("Continue")
                         .font(.headline)
