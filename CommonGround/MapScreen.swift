@@ -9,6 +9,7 @@ import Combine
 struct MapScreen: View {
     @StateObject private var locationManager = LocationManager()
     @StateObject private var searchManager = PlaceSearchManager()
+    @StateObject private var helpRequestManager = HelpRequestManager()
 
     @State private var selectedPlace: CommunityPlace? = nil
     @State private var showSheet: Bool = false
@@ -18,6 +19,12 @@ struct MapScreen: View {
 
     // track if we've already triggered a search so we don't spam repeat lookups
     @State private var didSearchForPlaces = false
+    
+    @State private var showHelpCenter = false  // NEW
+    
+    @State private var selectedHelpRequest: HelpRequest? = nil
+
+
 
     var body: some View {
         ZStack {
@@ -29,12 +36,27 @@ struct MapScreen: View {
             )
         }
         .sheet(isPresented: $showSheet, onDismiss: {
-            // when the detail sheet is closed, clear selection so the bar goes
-            // back to "Find a place to connect"
             selectedPlace = nil
         }) {
             PlaceDetailSheetWrapper(place: selectedPlace)
                 .presentationDetents([.fraction(0.35), .large])
+        }
+        .sheet(item: $selectedHelpRequest) { req in
+            HelpRequestDetailSheet(
+                request: req,
+                manager: helpRequestManager,
+                onClose: {
+                    selectedHelpRequest = nil
+                }
+            )
+            .presentationDetents([.fraction(0.4), .large])
+        }
+        .fullScreenCover(isPresented: $showHelpCenter) {
+            HelpCenterView(
+                userLocation: locationManager.userLocation,
+                manager: helpRequestManager,
+                onClose: { showHelpCenter = false }
+            )
         }
         .onReceive(locationManager.$authorizationStatus) { status in
             print("👀 MapScreen sees auth status:", status.rawValue)
@@ -65,12 +87,22 @@ struct MapScreen: View {
                     MapReaderView(
                         userCoordinate: userCoord,
                         places: searchManager.places,
-                        onSelect: { place in
+                        helpRequests: helpRequestManager.requests,
+                        onSelectPlace: { place in
                             selectedPlace = place
                             showSheet = true
                         },
+                        onSelectHelpRequest: { req in
+                            selectedHelpRequest = req
+                        },
+                        onTapHelp: {
+                            showHelpCenter = true
+                        },
                         didSetInitialCamera: $didSetInitialCamera
                     )
+
+
+
                     .ignoresSafeArea()
 
                     if searchManager.isSearching {
@@ -98,6 +130,8 @@ struct MapScreen: View {
                         didSearchForPlaces = true
                         print("🛰 Fetching nearby places once at userCoord \(userCoord.latitude), \(userCoord.longitude)")
                         searchManager.fetchNearbyPlaces(near: userCoord)
+                        helpRequestManager.loadInitialDemoRequests(near: userCoord)
+
                     }
                 }
 
@@ -178,7 +212,11 @@ struct LocationDeniedView: View {
 struct MapReaderView: View {
     let userCoordinate: CLLocationCoordinate2D
     let places: [CommunityPlace]
-    let onSelect: (CommunityPlace) -> Void
+    let helpRequests: [HelpRequest]
+
+    let onSelectPlace: (CommunityPlace) -> Void
+    let onSelectHelpRequest: (HelpRequest) -> Void
+    let onTapHelp: () -> Void
 
     @Binding var didSetInitialCamera: Bool
 
@@ -198,7 +236,7 @@ struct MapReaderView: View {
                                anchor: .bottom) {
 
                         Button {
-                            onSelect(place)
+                            onSelectPlace(place)
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: "mappin.circle.fill")
@@ -207,6 +245,59 @@ struct MapReaderView: View {
                                     .foregroundStyle(.red, .white)
 
                                 Text(shortName(place.name))
+                                    .font(.caption2)
+                                    .padding(4)
+                                    .background(.ultraThinMaterial)
+                                    .clipShape(
+                                        RoundedRectangle(
+                                            cornerRadius: 6,
+                                            style: .continuous
+                                        )
+                                    )
+                            }
+                        }
+                        .buttonStyle(.plain);
+                    }
+                }
+                ForEach(helpRequests.filter { $0.isActive }) { request in
+                    Annotation(request.title,
+                               coordinate: request.coordinate,
+                               anchor: .bottom) {
+
+                        VStack(spacing: 4) {
+                            Image(systemName: "hand.raised.fill")
+                                .font(.title2)
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.yellow, .white)
+
+                            Text(shortName(request.title))
+                                .font(.caption2)
+                                .padding(4)
+                                .background(.ultraThinMaterial)
+                                .clipShape(
+                                    RoundedRectangle(
+                                        cornerRadius: 6,
+                                        style: .continuous
+                                    )
+                                )
+                        }
+                    }
+                }
+                ForEach(helpRequests.filter { $0.isActive }) { request in
+                    Annotation(request.title,
+                               coordinate: request.coordinate,
+                               anchor: .bottom) {
+
+                        Button {
+                            onSelectHelpRequest(request)
+                        } label: {
+                            VStack(spacing: 4) {
+                                Image(systemName: "hand.raised.fill")
+                                    .font(.title2)
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.yellow, .white)
+
+                                Text(shortName(request.title))
                                     .font(.caption2)
                                     .padding(4)
                                     .background(.ultraThinMaterial)
@@ -246,6 +337,28 @@ struct MapReaderView: View {
                     Spacer()
 
                     VStack(spacing: 12) {
+                        Button {
+                                onTapHelp()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "hand.raised.fill")
+                                        .font(.headline)
+                                    Text("Help")
+                                        .font(.headline)
+                                }
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(.ultraThinMaterial)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                .strokeBorder(Color.white.opacity(0.4), lineWidth: 1)
+                                        )
+                                )
+                            }
+                            .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 8)
                         // recenter button
                         Button {
                             // animate camera back to user
