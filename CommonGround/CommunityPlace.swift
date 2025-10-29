@@ -1,29 +1,25 @@
 import Foundation
 import CoreLocation
+import MapKit
 
-struct CommunityPlace: Identifiable {
+struct CommunityPlace: Identifiable, Hashable {
     let id = UUID()
     let name: String
     let description: String
     let coordinate: CLLocationCoordinate2D
     let ageTags: [String]
     let hours: String
-}
 
-// Temporary hardcoded mock data for judging/demo
-let samplePlaces: [CommunityPlace] = [
-    CommunityPlace(
-        name: "Mineral Point Youth Center",
-        description: "After-school hangout, tutoring, games",
-        coordinate: CLLocationCoordinate2D(latitude: 42.8600, longitude: -90.1790),
-        ageTags: ["Kids", "Teens"],
-        hours: "Mon–Fri 3–7 PM"
-    ),
-    CommunityPlace(
-        name: "Senior Community Center",
-        description: "Coffee hour, bingo, tech help from students",
-        coordinate: CLLocationCoordinate2D(latitude: 42.8608, longitude: -90.1802),
-        ageTags: ["Seniors", "All Ages"],
-        hours: "Daily 9 AM–2 PM"
-    )
-]
+    // MARK: - Manual Hashable / Equatable
+    static func == (lhs: CommunityPlace, rhs: CommunityPlace) -> Bool {
+        lhs.name == rhs.name &&
+        abs(lhs.coordinate.latitude - rhs.coordinate.latitude) < 0.0001 &&
+        abs(lhs.coordinate.longitude - rhs.coordinate.longitude) < 0.0001
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(name.lowercased())
+        hasher.combine(round(coordinate.latitude * 10000))
+        hasher.combine(round(coordinate.longitude * 10000))
+    }
+}

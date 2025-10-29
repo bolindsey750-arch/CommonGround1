@@ -9,44 +9,67 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var authorizationStatus: CLAuthorizationStatus
 
     override init() {
-        self.authorizationStatus = manager.authorizationStatus
+        self.authorizationStatus = .notDetermined
         super.init()
 
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = kCLDistanceFilterNone
 
-        // Request permission
-        manager.requestWhenInUseAuthorization()
+        // Ask for permission on main thread
+        DispatchQueue.main.async {
+            print("🔵 Requesting when-in-use authorization…")
+            self.manager.requestWhenInUseAuthorization()
 
-        // For iOS versions where the delegate callback doesn’t fire immediately:
-        checkAuthorizationAndStartIfPossible()
-    }
-
-    private func checkAuthorizationAndStartIfPossible() {
-        switch manager.authorizationStatus {
-        case .authorizedWhenInUse, .authorizedAlways:
-            manager.startUpdatingLocation()
-        default:
-            break
+            // sync our published status
+            self.authorizationStatus = self.manager.authorizationStatus
+            self.handleAuthorization()
         }
     }
 
-    // MARK: - CLLocationManagerDelegate
-
+    // iOS 14+
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        authorizationStatus = manager.authorizationStatus
-        checkAuthorizationAndStartIfPossible()
+        let status = manager.authorizationStatus
+        print("📍 Authorization changed to: \(status.rawValue)")
+        authorizationStatus = status
+        handleAuthorization()
+    }
+
+    // < iOS 14 fallback
+    func locationManager(_ manager: CLLocationManager,
+                         didChangeAuthorization status: CLAuthorizationStatus) {
+        print("📍 (legacy) Authorization changed to: \(status.rawValue)")
+        authorizationStatus = status
+        handleAuthorization()
+    }
+
+    private func handleAuthorization() {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            print("✅ Authorized, starting location updates…")
+            manager.startUpdatingLocation()
+
+        case .denied, .restricted:
+            print("❌ Location access denied or restricted.")
+
+        case .notDetermined:
+            print("⏳ Waiting for user to grant location access…")
+
+        @unknown default:
+            print("🤷 Unknown location authorization state.")
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        if let coordinate = locations.last?.coordinate {
-            DispatchQueue.main.async {
-                self.userLocation = coordinate
-            }
+        guard let coordinate = locations.last?.coordinate else { return }
+        print("📡 Got location update: \(coordinate.latitude), \(coordinate.longitude)")
+
+        DispatchQueue.main.async {
+            self.userLocation = coordinate
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("Location error: \(error.localizedDescription)")
+        print("⚠️ Location error: \(error.localizedDescription)")
     }
 }
