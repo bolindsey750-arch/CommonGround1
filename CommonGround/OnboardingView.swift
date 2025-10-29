@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct OnboardingView: View {
-    // This is shared with ContentView
-    @AppStorage("hasSeenOnboarding") var hasSeenOnboarding: Bool = false
+    // Binding from ContentView. Controls whether onboarding is done.
+    @Binding var hasSeenOnboardingThisLaunch: Bool
 
     var body: some View {
         ZStack {
@@ -63,8 +63,8 @@ struct OnboardingView: View {
 
                 // Continue button
                 Button {
-                    // mark onboarding as done
-                    hasSeenOnboarding = false
+                    // mark onboarding as done for this launch
+                    hasSeenOnboardingThisLaunch = true
                 } label: {
                     Text("Continue")
                         .font(.headline)
@@ -117,6 +117,6 @@ struct OnboardingRow: View {
 }
 
 #Preview {
-    OnboardingView()
+    // Preview with onboarding still showing
+    OnboardingView(hasSeenOnboardingThisLaunch: .constant(false))
 }
-

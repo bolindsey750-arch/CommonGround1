@@ -1,17 +1,17 @@
 import SwiftUI
 
 struct ContentView: View {
-    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding: Bool = false
+    @Binding var showOnboarding: Bool   // comes from CommonGroundApp
 
     var body: some View {
-        if hasSeenOnboarding {
-            MapScreen()
+        if !showOnboarding {
+            OnboardingView(hasSeenOnboardingThisLaunch: $showOnboarding)
         } else {
-            OnboardingView()
+            MapScreen()
         }
     }
 }
 
 #Preview {
-    ContentView()
+    ContentView(showOnboarding: .constant(false))
 }
