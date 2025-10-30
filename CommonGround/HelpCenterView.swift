@@ -12,42 +12,43 @@ struct HelpCenterView: View {
 
     // instead of Bool + optional, we just drive the sheet off this directly
     @State private var selectedRequest: HelpRequest? = nil
+    @State private var showingNewRequestSheet = false
+
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case title
+        case details
+        case tip
+    }
 
     var body: some View {
         NavigationStack {
+            let activeRequests: [HelpRequest] = manager.requests.filter { $0.isActive }
+            let finishedRequests: [HelpRequest] = manager.requests.filter { !$0.isActive }
+
             List {
                 Section("Active requests nearby") {
-                    ForEach(manager.requests.filter { $0.isActive }) { req in
+                    ForEach(activeRequests) { req in
                         Button {
-                            selectedRequest = req
+                            if !req.isDemo {
+                                selectedRequest = req
+                            }
                         } label: {
                             HelpRequestRow(req: req)
                         }
                         .buttonStyle(.plain)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button {
-                                if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-                                    manager.requests[idx].isActive = false
-                                }
-                            } label: {
-                                Label("Done", systemImage: "checkmark.circle.fill")
-                            }
-                            .tint(.green)
+                            trailingActionButton(for: req)
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-                                    manager.requests.remove(at: idx)
-                                }
-                            } label: {
-                                Label("Cancel", systemImage: "xmark.circle.fill")
-                            }
+                            leadingActionButton(for: req)
                         }
                     }
                 }
 
                 Section("Finished / rated") {
-                    ForEach(manager.requests.filter { !$0.isActive }) { req in
+                    ForEach(finishedRequests) { req in
                         HelpRequestRow(req: req)
                             .disabled(true)
                             .opacity(0.6)
@@ -56,97 +57,174 @@ struct HelpCenterView: View {
             }
             .listStyle(.insetGrouped)
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Ask for help")
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    TextField("What do you need?", text: $newTitle)
-                        .textFieldStyle(.plain)
-                        .padding(10)
-                        .background(Color.black.opacity(0.9), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                        .foregroundStyle(.primary)
-
-                    TextField("More details…", text: $newDetails, axis: .vertical)
-                        .lineLimit(2...4)
-                        .textFieldStyle(.plain)
-                        .padding(10)
-                        .background(Color.black.opacity(0.9), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                        .foregroundStyle(.primary)
-
-                    TextField("Tip (optional $)", text: $newTip)
-                        .keyboardType(.numberPad)
-                        .textFieldStyle(.plain)
-                        .padding(10)
-                        .background(Color.black.opacity(0.9), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                        )
-                        .foregroundStyle(.primary)
-
-                    Button {
-                        guard let coord = userLocation else { return }
-                        let tipVal = Double(newTip)
-                        manager.postNewRequest(
-                            title: newTitle.isEmpty ? "Help needed" : newTitle,
-                            details: newDetails,
-                            tipAmount: tipVal,
-                            at: coord
-                        )
-                        newTitle = ""
-                        newDetails = ""
-                        newTip = ""
-                    } label: {
-                        Text("Post Request")
-                            .bold()
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(.blue)
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
-                .background(Color.black)
-                .ignoresSafeArea(.keyboard, edges: .bottom)
-            }
             .navigationTitle("Help Center")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showingNewRequestSheet = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundStyle(.blue)
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Close") {
                         onClose()
                     }
                 }
             }
-            // THIS is the important part: sheet(item:)
             .sheet(item: $selectedRequest) { req in
                 HelpRequestDetailSheet(
                     request: req,
                     manager: manager,
                     onClose: {
-                        // dismiss
                         selectedRequest = nil
                     }
                 )
                 .presentationDetents([.fraction(0.4), .large])
             }
+            .sheet(isPresented: $showingNewRequestSheet) {
+                newRequestSheet
+            }
         }
+    }
+
+    @ViewBuilder
+    private var newRequestSheet: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Ask for help")
+                        .font(.headline)
+
+                    TextField("What do you need?", text: $newTitle)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .title)
+
+                    Text("More details…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    TextEditor(text: $newDetails)
+                        .frame(minHeight: 120)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.black.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .focused($focusedField, equals: .details)
+
+                    TextField("Tip (optional $)", text: $newTip)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(.roundedBorder)
+                        .focused($focusedField, equals: .tip)
+                }
+                .padding()
+                .safeAreaPadding(.top, 8)
+                .foregroundStyle(.primary)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Color.black.opacity(0.9))
+            .navigationTitle("New Request")
+            .toolbar {
+                ToolbarItem(placement: .keyboard) {
+                    HStack {
+                        Spacer()
+                        Button("Done") { focusedField = nil }
+                    }
+                }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showingNewRequestSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Post") { postNewRequest() }
+                        .bold()
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationBackground(Color.black.opacity(0.9))
+    }
+
+    @ViewBuilder
+    private func trailingActionButton(for req: HelpRequest) -> some View {
+        if req.isDemo {
+            Button {
+                acceptDemo(req)
+            } label: {
+                Label("Accept", systemImage: "hand.thumbsup.fill")
+            }
+            .tint(.blue)
+        } else {
+            Button {
+                markDone(req)
+            } label: {
+                Label("Done", systemImage: "checkmark.circle.fill")
+            }
+            .tint(.green)
+        }
+    }
+
+    @ViewBuilder
+    private func leadingActionButton(for req: HelpRequest) -> some View {
+        if req.isDemo {
+            Button {
+                declineDemo(req)
+            } label: {
+                Label("Decline", systemImage: "hand.thumbsdown.fill")
+            }
+            .tint(.gray)
+        } else {
+            Button(role: .destructive) {
+                cancel(req)
+            } label: {
+                Label("Cancel", systemImage: "xmark.circle.fill")
+            }
+        }
+    }
+
+    private func acceptDemo(_ req: HelpRequest) {
+        if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
+            manager.requests[idx].isActive = true
+        }
+    }
+
+    private func markDone(_ req: HelpRequest) {
+        if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
+            manager.requests[idx].isActive = false
+        }
+    }
+
+    private func cancel(_ req: HelpRequest) {
+        if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
+            manager.requests.remove(at: idx)
+        }
+    }
+    
+    private func declineDemo(_ req: HelpRequest) {
+        // Remove the demo request from the list when declined
+        if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
+            manager.requests.remove(at: idx)
+        }
+    }
+
+    private func postNewRequest() {
+        guard let coord = userLocation else { return }
+        let tipVal = Double(newTip)
+        manager.postNewRequest(
+            title: newTitle.isEmpty ? "Help needed" : newTitle,
+            details: newDetails,
+            tipAmount: tipVal,
+            at: coord
+        )
+        newTitle = ""
+        newDetails = ""
+        newTip = ""
+        focusedField = nil
+        showingNewRequestSheet = false
     }
 }
 
-// unchanged row view
+// Note: This view expects `HelpRequest` to have a `isDemo: Bool` to distinguish demo requests
 struct HelpRequestRow: View {
     let req: HelpRequest
 
@@ -173,6 +251,16 @@ struct HelpRequestRow: View {
                         .foregroundStyle(.green)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
+
+                if req.isActive && req.isDemo {
+                    Text("DEMO")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .background(.blue.opacity(0.2))
+                        .foregroundStyle(.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
             }
 
             Text(req.details)
@@ -197,3 +285,4 @@ struct HelpRequestRow: View {
         .padding(.vertical, 4)
     }
 }
+

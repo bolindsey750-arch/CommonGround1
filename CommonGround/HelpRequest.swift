@@ -11,6 +11,7 @@ struct HelpRequest: Identifiable, Hashable {
     var isActive: Bool       // true = still needs help, false = completed/cancelled
     var helperName: String?  // who helped (afterwards)
     var rating: Int?         // stars 1-5 after done
+    var isDemo: Bool      // true if this was generated as demo content
 
     init(
         id: UUID = UUID(),
@@ -20,7 +21,8 @@ struct HelpRequest: Identifiable, Hashable {
         coordinate: CLLocationCoordinate2D,
         isActive: Bool,
         helperName: String?,
-        rating: Int?
+        rating: Int?,
+        isDemo: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -30,6 +32,7 @@ struct HelpRequest: Identifiable, Hashable {
         self.isActive = isActive
         self.helperName = helperName
         self.rating = rating
+        self.isDemo = isDemo
     }
 
     // MARK: - Manual Equatable / Hashable
@@ -58,7 +61,8 @@ struct HelpRequest: Identifiable, Hashable {
                 ),
                 isActive: true,
                 helperName: nil,
-                rating: nil
+                rating: nil,
+                isDemo: true
             ),
             HelpRequest(
                 title: "Fix printer / iPad wifi",
@@ -70,7 +74,8 @@ struct HelpRequest: Identifiable, Hashable {
                 ),
                 isActive: true,
                 helperName: nil,
-                rating: nil
+                rating: nil,
+                isDemo: true
             )
         ]
     }
