@@ -2,15 +2,15 @@ import SwiftUI
 
 @main
 struct CommonGroundApp: App {
-    // This Boolean resets to false each time the app starts
+    @AppStorage("skipOnboarding") private var skipOnboarding: Bool = false
     @State private var showOnboarding = false
 
     var body: some Scene {
         WindowGroup {
             ContentView(showOnboarding: $showOnboarding)
                 .onAppear {
-                    // 👇 When the app launches, force onboarding to show again
-                    showOnboarding = false
+                    // If user chose to skip onboarding, go straight to the main screen
+                    showOnboarding = skipOnboarding
                 }
         }
     }

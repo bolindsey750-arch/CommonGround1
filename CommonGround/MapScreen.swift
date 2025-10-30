@@ -34,12 +34,15 @@ struct MapScreen: View {
                 selectedPlace: selectedPlace,
                 isExpanded: showSheet
             )
+            .ignoresSafeArea(.keyboard)
+            .safeAreaPadding(.bottom, 0)
         }
         .sheet(isPresented: $showSheet, onDismiss: {
             selectedPlace = nil
         }) {
             PlaceDetailSheetWrapper(place: selectedPlace)
                 .presentationDetents([.fraction(0.35), .large])
+                .presentationDragIndicator(.hidden)
         }
         .sheet(item: $selectedHelpRequest) { req in
             HelpRequestDetailSheet(
@@ -50,6 +53,7 @@ struct MapScreen: View {
                 }
             )
             .presentationDetents([.fraction(0.4), .large])
+            .presentationDragIndicator(.hidden)
         }
         .fullScreenCover(isPresented: $showHelpCenter) {
             HelpCenterView(
@@ -231,7 +235,7 @@ struct MapReaderView: View {
 
                 // Pins for each returned place
                 ForEach(places) { place in
-                    Annotation(place.name,
+                    Annotation("",
                                coordinate: place.coordinate,
                                anchor: .bottom) {
 
@@ -260,42 +264,22 @@ struct MapReaderView: View {
                     }
                 }
                 ForEach(helpRequests.filter { $0.isActive }) { request in
-                    Annotation(request.title,
-                               coordinate: request.coordinate,
-                               anchor: .bottom) {
-
-                        VStack(spacing: 4) {
-                            Image(systemName: "hand.raised.fill")
-                                .font(.title2)
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.yellow, .white)
-
-                            Text(shortName(request.title))
-                                .font(.caption2)
-                                .padding(4)
-                                .background(.ultraThinMaterial)
-                                .clipShape(
-                                    RoundedRectangle(
-                                        cornerRadius: 6,
-                                        style: .continuous
-                                    )
-                                )
-                        }
-                    }
-                }
-                ForEach(helpRequests.filter { $0.isActive }) { request in
-                    Annotation(request.title,
+                    Annotation("",
                                coordinate: request.coordinate,
                                anchor: .bottom) {
 
                         Button {
-                            onSelectHelpRequest(request)
+                            if request.isDemo {
+                                onTapHelp()
+                            } else {
+                                onSelectHelpRequest(request)
+                            }
                         } label: {
                             VStack(spacing: 4) {
                                 Image(systemName: "hand.raised.fill")
                                     .font(.title2)
                                     .symbolRenderingMode(.palette)
-                                    .foregroundStyle(.yellow, .white)
+                                    .foregroundStyle(request.isDemo ? .yellow : .blue, .white)
 
                                 Text(shortName(request.title))
                                     .font(.caption2)
@@ -605,3 +589,4 @@ struct PlaceDetailSheet: View {
         item.openInMaps()
     }
 }
+

@@ -3,6 +3,8 @@ import SwiftUI
 struct OnboardingView: View {
     // Binding from ContentView. Controls whether onboarding is done.
     @Binding var hasSeenOnboardingThisLaunch: Bool
+    @AppStorage("skipOnboarding") private var skipOnboarding: Bool = false
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
 
     var body: some View {
         ZStack {
@@ -58,12 +60,28 @@ struct OnboardingView: View {
                     )
                 }
                 .padding(.horizontal, 24)
+                
+                Toggle(isOn: $skipOnboarding) {
+                    HStack(spacing: 8) {
+                        Image(systemName: skipOnboarding ? "checkmark.square.fill" : "square")
+                            .foregroundStyle(skipOnboarding ? .blue : .white.opacity(0.7))
+                            .font(.title3)
+                        Text("Don't show again")
+                            .foregroundStyle(.white)
+                    }
+                }
+                .toggleStyle(.button)
+                .buttonStyle(.plain)
+                .padding(.horizontal, 24)
 
                 Spacer()
 
                 // Continue button
                 Button {
-                    // mark onboarding as done for this launch
+                    // Persist that onboarding was completed at least once
+                    hasCompletedOnboarding = true
+                    // If user chose to skip onboarding in future, it's already bound via @AppStorage("skipOnboarding")
+                    // Mark onboarding as done for this launch
                     hasSeenOnboardingThisLaunch = true
                 } label: {
                     Text("Continue")
