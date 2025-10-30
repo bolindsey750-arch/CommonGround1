@@ -24,12 +24,38 @@ struct HelpCenterView: View {
 
     var body: some View {
         NavigationStack {
-            let activeRequests: [HelpRequest] = manager.requests.filter { $0.isActive }
+            let activeRealRequests: [HelpRequest] = manager.requests.filter { $0.isActive && !$0.isDemo }
+            let activeDemoRequests: [HelpRequest] = manager.requests.filter { $0.isActive && $0.isDemo }
             let finishedRequests: [HelpRequest] = manager.requests.filter { !$0.isActive }
+            let allActiveRequests: [HelpRequest] = activeRealRequests + activeDemoRequests
 
             List {
-                Section("Active requests nearby") {
-                    ForEach(activeRequests) { req in
+                Section("Active (accepted)") {
+                    if activeRealRequests.isEmpty {
+                        Text("No accepted requests yet")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(activeRealRequests) { req in
+                            Button {
+                                if !req.isDemo {
+                                    selectedRequest = req
+                                }
+                            } label: {
+                                HelpRequestRow(req: req)
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                trailingActionButton(for: req)
+                            }
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                leadingActionButton(for: req)
+                            }
+                        }
+                    }
+                }
+
+                Section("Active demo requests") {
+                    ForEach(activeDemoRequests) { req in
                         Button {
                             if !req.isDemo {
                                 selectedRequest = req
@@ -184,26 +210,35 @@ struct HelpCenterView: View {
 
     private func acceptDemo(_ req: HelpRequest) {
         if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-            manager.requests[idx].isActive = true
+            withAnimation(.snappy) {
+                manager.requests[idx].isActive = true
+                manager.requests[idx].isDemo = false
+            }
         }
     }
 
     private func markDone(_ req: HelpRequest) {
         if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-            manager.requests[idx].isActive = false
+            withAnimation(.snappy) {
+                manager.requests[idx].isActive = false
+            }
         }
     }
 
     private func cancel(_ req: HelpRequest) {
         if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-            manager.requests.remove(at: idx)
+            withAnimation(.snappy) {
+                manager.requests.remove(at: idx)
+            }
         }
     }
     
     private func declineDemo(_ req: HelpRequest) {
         // Remove the demo request from the list when declined
         if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-            manager.requests.remove(at: idx)
+            withAnimation(.snappy) {
+                manager.requests.remove(at: idx)
+            }
         }
     }
 
