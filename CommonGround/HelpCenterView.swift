@@ -10,74 +10,70 @@ struct HelpCenterView: View {
     @State private var newDetails: String = ""
     @State private var newTip: String = ""
 
-    // instead of Bool + optional, we just drive the sheet off this directly
     @State private var selectedRequest: HelpRequest? = nil
     @State private var showingNewRequestSheet = false
 
     @FocusState private var focusedField: Field?
 
     private enum Field: Hashable {
-        case title
-        case details
-        case tip
+        case title, details, tip
     }
 
     var body: some View {
         NavigationStack {
-            let activeRealRequests: [HelpRequest] = manager.requests.filter { $0.isActive && !$0.isDemo }
-            let activeDemoRequests: [HelpRequest] = manager.requests.filter { $0.isActive && $0.isDemo }
-            let finishedRequests: [HelpRequest] = manager.requests.filter { !$0.isActive }
-            let allActiveRequests: [HelpRequest] = activeRealRequests + activeDemoRequests
+            let myId = manager.currentUserId
+            let myRequests = manager.requests.filter { $0.isActive && $0.creatorId == myId }
+            let nearbyRequests = manager.requests.filter { $0.isActive && $0.creatorId != myId }
+            let finishedRequests = manager.requests.filter { !$0.isActive }
 
             List {
-                Section("Active (accepted)") {
-                    if activeRealRequests.isEmpty {
-                        Text("No accepted requests yet")
+                // MARK: - My Active Requests
+                Section("Active (mine)") {
+                    if myRequests.isEmpty {
+                        Text("No active requests yet.")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(activeRealRequests) { req in
-                            Button {
-                                if !req.isDemo {
-                                    selectedRequest = req
-                                }
-                            } label: {
+                        ForEach(myRequests) { req in
+                            Button { selectedRequest = req } label: {
                                 HelpRequestRow(req: req)
                             }
                             .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                trailingActionButton(for: req)
+                                markDoneButton(for: req)
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                leadingActionButton(for: req)
+                                cancelButton(for: req)
                             }
                         }
                     }
                 }
 
-                Section("Active demo requests") {
-                    ForEach(activeDemoRequests) { req in
-                        Button {
-                            if !req.isDemo {
-                                selectedRequest = req
+                // MARK: - Nearby Requests
+                Section("Active (nearby)") {
+                    if nearbyRequests.isEmpty {
+                        Text("No nearby requests right now.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(nearbyRequests) { req in
+                            Button { selectedRequest = req } label: {
+                                HelpRequestRow(req: req)
                             }
-                        } label: {
-                            HelpRequestRow(req: req)
-                        }
-                        .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            trailingActionButton(for: req)
-                        }
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            leadingActionButton(for: req)
+                            .buttonStyle(.plain)
                         }
                     }
                 }
 
+                // MARK: - Completed / Rated
                 Section("Finished / rated") {
-                    ForEach(finishedRequests) { req in
-                        HelpRequestRow(req: req)
-                            .disabled(true)
-                            .opacity(0.6)
+                    if finishedRequests.isEmpty {
+                        Text("No finished requests yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(finishedRequests) { req in
+                            HelpRequestRow(req: req)
+                                .disabled(true)
+                                .opacity(0.6)
+                        }
                     }
                 }
             }
@@ -94,18 +90,14 @@ struct HelpCenterView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") {
-                        onClose()
-                    }
+                    Button("Close") { onClose() }
                 }
             }
             .sheet(item: $selectedRequest) { req in
                 HelpRequestDetailSheet(
                     request: req,
                     manager: manager,
-                    onClose: {
-                        selectedRequest = nil
-                    }
+                    onClose: { selectedRequest = nil }
                 )
                 .presentationDetents([.fraction(0.4), .large])
             }
@@ -115,6 +107,7 @@ struct HelpCenterView: View {
         }
     }
 
+    // MARK: - New Request Sheet
     @ViewBuilder
     private var newRequestSheet: some View {
         NavigationStack {
@@ -171,74 +164,36 @@ struct HelpCenterView: View {
         .presentationBackground(Color.black.opacity(0.9))
     }
 
+    // MARK: - Swipe Actions
     @ViewBuilder
-    private func trailingActionButton(for req: HelpRequest) -> some View {
-        if req.isDemo {
-            Button {
-                acceptDemo(req)
-            } label: {
-                Label("Accept", systemImage: "hand.thumbsup.fill")
-            }
-            .tint(.blue)
-        } else {
-            Button {
-                markDone(req)
-            } label: {
-                Label("Done", systemImage: "checkmark.circle.fill")
-            }
-            .tint(.green)
+    private func markDoneButton(for req: HelpRequest) -> some View {
+        Button {
+            markDone(req)
+        } label: {
+            Label("Done", systemImage: "checkmark.circle.fill")
         }
+        .tint(.green)
     }
 
     @ViewBuilder
-    private func leadingActionButton(for req: HelpRequest) -> some View {
-        if req.isDemo {
-            Button {
-                declineDemo(req)
-            } label: {
-                Label("Decline", systemImage: "hand.thumbsdown.fill")
-            }
-            .tint(.gray)
-        } else {
-            Button(role: .destructive) {
-                cancel(req)
-            } label: {
-                Label("Cancel", systemImage: "xmark.circle.fill")
-            }
+    private func cancelButton(for req: HelpRequest) -> some View {
+        Button(role: .destructive) {
+            cancel(req)
+        } label: {
+            Label("Cancel", systemImage: "xmark.circle.fill")
         }
     }
 
-    private func acceptDemo(_ req: HelpRequest) {
-        if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-            withAnimation(.snappy) {
-                manager.requests[idx].isActive = true
-                manager.requests[idx].isDemo = false
-            }
-        }
-    }
-
+    // MARK: - Actions
     private func markDone(_ req: HelpRequest) {
-        if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-            withAnimation(.snappy) {
-                manager.requests[idx].isActive = false
-            }
+        withAnimation(.snappy) {
+            manager.completeRequest(req, helperName: manager.currentUserId, rating: 5)
         }
     }
 
     private func cancel(_ req: HelpRequest) {
-        if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-            withAnimation(.snappy) {
-                manager.requests.remove(at: idx)
-            }
-        }
-    }
-    
-    private func declineDemo(_ req: HelpRequest) {
-        // Remove the demo request from the list when declined
-        if let idx = manager.requests.firstIndex(where: { $0.id == req.id }) {
-            withAnimation(.snappy) {
-                manager.requests.remove(at: idx)
-            }
+        withAnimation(.snappy) {
+            manager.cancelRequest(req)
         }
     }
 
@@ -259,7 +214,7 @@ struct HelpCenterView: View {
     }
 }
 
-// Note: This view expects `HelpRequest` to have a `isDemo: Bool` to distinguish demo requests
+// MARK: - Row View
 struct HelpRequestRow: View {
     let req: HelpRequest
 
@@ -268,7 +223,6 @@ struct HelpRequestRow: View {
             HStack {
                 Text(req.title)
                     .font(.headline)
-
                 if req.isActive {
                     Text("ACTIVE")
                         .font(.caption2)
@@ -286,16 +240,6 @@ struct HelpRequestRow: View {
                         .foregroundStyle(.green)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
-
-                if req.isActive && req.isDemo {
-                    Text("DEMO")
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
-                        .background(.blue.opacity(0.2))
-                        .foregroundStyle(.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                }
             }
 
             Text(req.details)
@@ -309,15 +253,16 @@ struct HelpRequestRow: View {
                         .font(.footnote)
                         .foregroundStyle(.blue)
                 }
-
                 if let rating = req.rating {
                     Text("Rated \(rating)★")
                         .font(.footnote)
                         .foregroundStyle(.orange)
                 }
+                Text("@\(req.creatorId)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 4)
     }
 }
-

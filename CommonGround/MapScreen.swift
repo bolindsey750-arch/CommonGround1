@@ -134,7 +134,13 @@ struct MapScreen: View {
                         didSearchForPlaces = true
                         print("🛰 Fetching nearby places once at userCoord \(userCoord.latitude), \(userCoord.longitude)")
                         searchManager.fetchNearbyPlaces(near: userCoord)
-                        helpRequestManager.loadInitialDemoRequests(near: userCoord)
+                        helpRequestManager.fetchRequests()
+
+                        // Optional: keep refreshing every 15 s so all phones stay in sync
+                        Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in
+                            helpRequestManager.fetchRequests()
+                        }
+
 
                     }
                 }
