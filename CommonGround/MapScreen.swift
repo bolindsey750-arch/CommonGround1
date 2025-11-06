@@ -89,6 +89,7 @@ struct MapScreen: View {
 
                 ZStack {
                     MapReaderView(
+                        manager: helpRequestManager,  // ✅ put this first
                         userCoordinate: userCoord,
                         places: searchManager.places,
                         helpRequests: helpRequestManager.requests,
@@ -104,6 +105,8 @@ struct MapScreen: View {
                         },
                         didSetInitialCamera: $didSetInitialCamera
                     )
+
+
 
 
 
@@ -220,6 +223,7 @@ struct LocationDeniedView: View {
 // MARK: - Map View (iOS 17+ Map API)
 
 struct MapReaderView: View {
+    let manager: HelpRequestManager
     let userCoordinate: CLLocationCoordinate2D
     let places: [CommunityPlace]
     let helpRequests: [HelpRequest]
@@ -275,10 +279,10 @@ struct MapReaderView: View {
                                anchor: .bottom) {
 
                         Button {
-                            if request.isDemo {
-                                onTapHelp()
+                            if request.creatorId == manager.currentUserId {
+                                onSelectHelpRequest(request)  // only yours open the detail sheet
                             } else {
-                                onSelectHelpRequest(request)
+                                // ignore taps or maybe show read-only preview later
                             }
                         } label: {
                             VStack(spacing: 4) {

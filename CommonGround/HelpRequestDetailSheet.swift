@@ -86,7 +86,7 @@ struct HelpRequestDetailSheet: View {
 
                     // ✅ Cancel section
                     Button(role: .destructive) {
-                        manager.cancelRequest(request)
+                        manager.deleteRequest(request)
                         onClose()
                     } label: {
                         Text("Cancel Request")

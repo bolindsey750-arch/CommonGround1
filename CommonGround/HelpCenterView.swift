@@ -9,76 +9,88 @@ struct HelpCenterView: View {
     @State private var newTitle: String = ""
     @State private var newDetails: String = ""
     @State private var newTip: String = ""
-
     @State private var selectedRequest: HelpRequest? = nil
     @State private var showingNewRequestSheet = false
 
     @FocusState private var focusedField: Field?
 
-    private enum Field: Hashable {
-        case title, details, tip
-    }
+    private enum Field: Hashable { case title, details, tip }
 
     var body: some View {
         NavigationStack {
             let myId = manager.currentUserId
-            let myRequests = manager.requests.filter { $0.isActive && $0.creatorId == myId }
-            let nearbyRequests = manager.requests.filter { $0.isActive && $0.creatorId != myId }
-            let finishedRequests = manager.requests.filter { !$0.isActive }
+            let myActiveRequests = manager.requests.filter { $0.isActive && $0.creatorId == myId }
+            let otherActiveRequests = manager.requests.filter { $0.isActive && $0.creatorId != myId }
+            let finishedRequests = manager.requests.filter { !$0.isActive && $0.creatorId == myId }
 
             List {
-                // MARK: - My Active Requests
-                Section("Active (mine)") {
-                    if myRequests.isEmpty {
+                // 🟦 MY ACTIVE REQUESTS
+                Section("My Active Requests") {
+                    if myActiveRequests.isEmpty {
                         Text("No active requests yet.")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(myRequests) { req in
+                        ForEach(myActiveRequests) { req in
                             Button { selectedRequest = req } label: {
                                 HelpRequestRow(req: req)
                             }
                             .buttonStyle(.plain)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                markDoneButton(for: req)
+                            .swipeActions(edge: .trailing) {
+                                Button {
+                                    markDone(req)
+                                } label: {
+                                    Label("Done", systemImage: "checkmark.circle.fill")
+                                }
+                                .tint(.green)
                             }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                cancelButton(for: req)
+                            .swipeActions(edge: .leading) {
+                                Button(role: .destructive) {
+                                    cancel(req)
+                                } label: {
+                                    Label("Cancel", systemImage: "xmark.circle.fill")
+                                }
                             }
                         }
                     }
                 }
 
-                // MARK: - Nearby Requests
-                Section("Active (nearby)") {
-                    if nearbyRequests.isEmpty {
-                        Text("No nearby requests right now.")
+                // 🟨 OTHER USERS' REQUESTS
+                Section("Requests from Others") {
+                    if otherActiveRequests.isEmpty {
+                        Text("No requests from others nearby.")
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(nearbyRequests) { req in
-                            Button { selectedRequest = req } label: {
-                                HelpRequestRow(req: req)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                // MARK: - Completed / Rated
-                Section("Finished / rated") {
-                    if finishedRequests.isEmpty {
-                        Text("No finished requests yet.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(finishedRequests) { req in
+                        ForEach(otherActiveRequests) { req in
                             HelpRequestRow(req: req)
-                                .disabled(true)
-                                .opacity(0.6)
+                                .swipeActions(edge: .trailing) {
+                                    Button {
+                                        acceptRequest(req)
+                                    } label: {
+                                        Label("Accept", systemImage: "hand.thumbsup.fill")
+                                    }
+                                    .tint(.blue)
+                                }
+                                .swipeActions(edge: .leading) {
+                                    Button {
+                                        declineRequest(req)
+                                    } label: {
+                                        Label("Decline", systemImage: "hand.thumbsdown.fill")
+                                    }
+                                    .tint(.gray)
+                                }
                         }
+                    }
+                }
+
+                // ✅ FINISHED REQUESTS
+                Section("Finished / Rated") {
+                    ForEach(finishedRequests) { req in
+                        HelpRequestRow(req: req)
+                            .disabled(true)
+                            .opacity(0.6)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Help Center")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -92,14 +104,6 @@ struct HelpCenterView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Close") { onClose() }
                 }
-            }
-            .sheet(item: $selectedRequest) { req in
-                HelpRequestDetailSheet(
-                    request: req,
-                    manager: manager,
-                    onClose: { selectedRequest = nil }
-                )
-                .presentationDetents([.fraction(0.4), .large])
             }
             .sheet(isPresented: $showingNewRequestSheet) {
                 newRequestSheet
@@ -127,8 +131,8 @@ struct HelpCenterView: View {
                     TextEditor(text: $newDetails)
                         .frame(minHeight: 120)
                         .scrollContentBackground(.hidden)
-                        .background(Color.black.opacity(0.9))
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(Color(.systemGray6))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                         .focused($focusedField, equals: .details)
 
                     TextField("Tip (optional $)", text: $newTip)
@@ -137,11 +141,8 @@ struct HelpCenterView: View {
                         .focused($focusedField, equals: .tip)
                 }
                 .padding()
-                .safeAreaPadding(.top, 8)
-                .foregroundStyle(.primary)
             }
             .scrollDismissesKeyboard(.interactively)
-            .background(Color.black.opacity(0.9))
             .navigationTitle("New Request")
             .toolbar {
                 ToolbarItem(placement: .keyboard) {
@@ -161,40 +162,26 @@ struct HelpCenterView: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
-        .presentationBackground(Color.black.opacity(0.9))
-    }
-
-    // MARK: - Swipe Actions
-    @ViewBuilder
-    private func markDoneButton(for req: HelpRequest) -> some View {
-        Button {
-            markDone(req)
-        } label: {
-            Label("Done", systemImage: "checkmark.circle.fill")
-        }
-        .tint(.green)
-    }
-
-    @ViewBuilder
-    private func cancelButton(for req: HelpRequest) -> some View {
-        Button(role: .destructive) {
-            cancel(req)
-        } label: {
-            Label("Cancel", systemImage: "xmark.circle.fill")
-        }
     }
 
     // MARK: - Actions
     private func markDone(_ req: HelpRequest) {
-        withAnimation(.snappy) {
-            manager.completeRequest(req, helperName: manager.currentUserId, rating: 5)
-        }
+        manager.completeRequest(req, helperName: manager.currentUserId, rating: 5)
     }
 
     private func cancel(_ req: HelpRequest) {
-        withAnimation(.snappy) {
-            manager.cancelRequest(req)
-        }
+        manager.deleteRequest(req)
+    }
+
+    private func acceptRequest(_ req: HelpRequest) {
+        manager.updateRequest(req, fields: [
+            "helperName": manager.currentUserId,
+            "isActive": true
+        ])
+    }
+
+    private func declineRequest(_ req: HelpRequest) {
+        manager.fetchRequests()
     }
 
     private func postNewRequest() {
@@ -209,7 +196,6 @@ struct HelpCenterView: View {
         newTitle = ""
         newDetails = ""
         newTip = ""
-        focusedField = nil
         showingNewRequestSheet = false
     }
 }
@@ -226,26 +212,23 @@ struct HelpRequestRow: View {
                 if req.isActive {
                     Text("ACTIVE")
                         .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
+                        .padding(4)
                         .background(.yellow.opacity(0.2))
                         .foregroundStyle(.yellow)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                 } else {
                     Text("DONE")
                         .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 4)
+                        .padding(4)
                         .background(.green.opacity(0.2))
                         .foregroundStyle(.green)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
             }
 
             Text(req.details)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 8) {
                 if let tip = req.tipAmount {
