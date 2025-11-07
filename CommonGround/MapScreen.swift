@@ -289,7 +289,10 @@ struct MapReaderView: View {
                                 Image(systemName: "hand.raised.fill")
                                     .font(.title2)
                                     .symbolRenderingMode(.palette)
-                                    .foregroundStyle(request.isDemo ? .yellow : .blue, .white)
+                                    .foregroundStyle(
+                                        request.creatorId == manager.currentUserId ? .blue : .yellow,
+                                        .white
+                                    )
 
                                 Text(shortName(request.title))
                                     .font(.caption2)

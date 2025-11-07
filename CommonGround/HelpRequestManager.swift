@@ -6,11 +6,24 @@ final class HelpRequestManager: ObservableObject {
     @Published var requests: [HelpRequest] = []
     
     // ⚙️ Update this line with your ngrok or LAN server URL
-    private let baseURL = "https://YOUR-NGROK-URL.ngrok-free.dev"
+    private let baseURL = "https://unslanderously-perithecial-mel.ngrok-free.dev"
     
     private let userIdKey = "com.CommonGround.userId"
+    private let declinedKey = "com.CommonGround.declinedRequests"
 
-    // Unique per-user ID (stored persistently)
+    // MARK: - Locally declined requests
+    private var declinedIDs: Set<UUID> {
+        get {
+            let saved = UserDefaults.standard.array(forKey: declinedKey) as? [String] ?? []
+            return Set(saved.compactMap { UUID(uuidString: $0) })
+        }
+        set {
+            let arr = newValue.map { $0.uuidString }
+            UserDefaults.standard.set(arr, forKey: declinedKey)
+        }
+    }
+
+    // MARK: - Unique per-user ID
     var currentUserId: String {
         if let existing = UserDefaults.standard.string(forKey: userIdKey) {
             return existing
@@ -32,8 +45,10 @@ final class HelpRequestManager: ObservableObject {
             }
             do {
                 let decoded = try JSONDecoder().decode([HelpRequest].self, from: data)
+                let declined = self.declinedIDs
                 DispatchQueue.main.async {
-                    self.requests = decoded
+                    // Filter out declined ones
+                    self.requests = decoded.filter { !declined.contains($0.id) }
                 }
             } catch {
                 print("❌ Decode error:", error)
@@ -90,6 +105,7 @@ final class HelpRequestManager: ObservableObject {
                 return
             }
             DispatchQueue.main.async {
+                // Simply refetch after update
                 self.fetchRequests()
             }
         }.resume()
@@ -109,6 +125,10 @@ final class HelpRequestManager: ObservableObject {
             }
             DispatchQueue.main.async {
                 self.requests.removeAll { $0.id == req.id }
+                // Give the server a short moment to process delete
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    self.fetchRequests()
+                }
             }
         }.resume()
     }
@@ -120,5 +140,18 @@ final class HelpRequestManager: ObservableObject {
             "helperName": helperName,
             "rating": rating
         ])
+    }
+
+    // MARK: - Decline persistence
+    func addDeclined(id: UUID) {
+        var declined = declinedIDs
+        declined.insert(id)
+        declinedIDs = declined
+    }
+
+    func removeDeclined(id: UUID) {
+        var declined = declinedIDs
+        declined.remove(id)
+        declinedIDs = declined
     }
 }

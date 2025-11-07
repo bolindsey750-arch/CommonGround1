@@ -11,6 +11,9 @@ struct HelpCenterView: View {
     @State private var newTip: String = ""
     @State private var selectedRequest: HelpRequest? = nil
     @State private var showingNewRequestSheet = false
+    @State private var declinedRequest: HelpRequest? = nil
+    @State private var showUndoBanner = false
+
 
     @FocusState private var focusedField: Field?
 
@@ -31,10 +34,9 @@ struct HelpCenterView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(myActiveRequests) { req in
-                            Button { selectedRequest = req } label: {
-                                HelpRequestRow(req: req)
+                            HelpRequestRow(req: req, manager: manager) {
+                                selectedRequest = req   // 👈 opens the rating/detail sheet
                             }
-                            .buttonStyle(.plain)
                             .swipeActions(edge: .trailing) {
                                 Button {
                                     markDone(req)
@@ -51,6 +53,9 @@ struct HelpCenterView: View {
                                 }
                             }
                         }
+
+
+
                     }
                 }
 
@@ -61,7 +66,7 @@ struct HelpCenterView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(otherActiveRequests) { req in
-                            HelpRequestRow(req: req)
+                            HelpRequestRow(req: req, manager: manager)
                                 .swipeActions(edge: .trailing) {
                                     Button {
                                         acceptRequest(req)
@@ -79,16 +84,18 @@ struct HelpCenterView: View {
                                     .tint(.gray)
                                 }
                         }
+
                     }
                 }
 
                 // ✅ FINISHED REQUESTS
                 Section("Finished / Rated") {
                     ForEach(finishedRequests) { req in
-                        HelpRequestRow(req: req)
+                        HelpRequestRow(req: req, manager: manager)
                             .disabled(true)
                             .opacity(0.6)
                     }
+
                 }
             }
             .navigationTitle("Help Center")
@@ -108,6 +115,46 @@ struct HelpCenterView: View {
             .sheet(isPresented: $showingNewRequestSheet) {
                 newRequestSheet
             }
+            .sheet(item: $selectedRequest) { req in
+                HelpRequestDetailSheet(
+                    request: req,
+                    manager: manager,
+                    onClose: { selectedRequest = nil }
+                )
+                .presentationDetents([.fraction(0.4), .large])
+                .presentationDragIndicator(.visible)
+            }
+            
+            .overlay(alignment: .bottom) {
+                if showUndoBanner {
+                    HStack {
+                        Text("Request declined")
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Button("Undo") {
+                            if let req = declinedRequest {
+                                manager.removeDeclined(id: req.id)
+                                withAnimation {
+                                    manager.requests.append(req)
+                                }
+                            }
+                            showUndoBanner = false
+                            declinedRequest = nil
+                        }
+                        .foregroundStyle(.yellow)
+                        .bold()
+                    }
+                    .padding()
+                    .background(.black.opacity(0.9))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.3), value: showUndoBanner)
+                }
+            }
+
+
+
         }
     }
 
@@ -170,7 +217,14 @@ struct HelpCenterView: View {
     }
 
     private func cancel(_ req: HelpRequest) {
+        // Immediately remove from local list
+        withAnimation {
+            manager.requests.removeAll { $0.id == req.id }
+        }
+
+        // Then call backend delete
         manager.deleteRequest(req)
+        
     }
 
     private func acceptRequest(_ req: HelpRequest) {
@@ -181,8 +235,22 @@ struct HelpCenterView: View {
     }
 
     private func declineRequest(_ req: HelpRequest) {
-        manager.fetchRequests()
+        withAnimation {
+            manager.requests.removeAll { $0.id == req.id }
+            manager.addDeclined(id: req.id)
+            declinedRequest = req
+            showUndoBanner = true
+        }
+
+        // hide undo banner after 10 seconds if not undone
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+            if showUndoBanner {
+                showUndoBanner = false
+                declinedRequest = nil
+            }
+        }
     }
+
 
     private func postNewRequest() {
         guard let coord = userLocation else { return }
@@ -197,53 +265,77 @@ struct HelpCenterView: View {
         newDetails = ""
         newTip = ""
         showingNewRequestSheet = false
+        
+        
     }
+    
 }
 
 // MARK: - Row View
 struct HelpRequestRow: View {
     let req: HelpRequest
+    let manager: HelpRequestManager
+    var onDetails: (() -> Void)? = nil   // 👈 new optional callback
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(req.title)
-                    .font(.headline)
-                if req.isActive {
-                    Text("ACTIVE")
+        HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(req.title)
+                        .font(.headline)
+                        .foregroundColor(req.creatorId == manager.currentUserId ? .blue : .yellow)
+
+                    if req.isActive {
+                        Text("ACTIVE")
+                            .font(.caption2)
+                            .padding(4)
+                            .background(.yellow.opacity(0.2))
+                            .foregroundStyle(.yellow)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    } else {
+                        Text("DONE")
+                            .font(.caption2)
+                            .padding(4)
+                            .background(.green.opacity(0.2))
+                            .foregroundStyle(.green)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                }
+
+                Text(req.details)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                HStack(spacing: 8) {
+                    if let tip = req.tipAmount {
+                        Text(String(format: "Tip: $%.0f", tip))
+                            .font(.footnote)
+                            .foregroundStyle(.blue)
+                    }
+                    if let rating = req.rating {
+                        Text("Rated \(rating)★")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
+                    Text("@\(req.creatorId)")
                         .font(.caption2)
-                        .padding(4)
-                        .background(.yellow.opacity(0.2))
-                        .foregroundStyle(.yellow)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                } else {
-                    Text("DONE")
-                        .font(.caption2)
-                        .padding(4)
-                        .background(.green.opacity(0.2))
-                        .foregroundStyle(.green)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            Text(req.details)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            Spacer()
 
-            HStack(spacing: 8) {
-                if let tip = req.tipAmount {
-                    Text(String(format: "Tip: $%.0f", tip))
-                        .font(.footnote)
-                        .foregroundStyle(.blue)
+            // 👇 Only show this button for your own requests
+            if req.creatorId == manager.currentUserId {
+                Button {
+                    onDetails?()   // triggers callback
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title2)
+                        .foregroundStyle(req.isActive ? .gray : .green)
+                        .padding(.trailing, 8)
                 }
-                if let rating = req.rating {
-                    Text("Rated \(rating)★")
-                        .font(.footnote)
-                        .foregroundStyle(.orange)
-                }
-                Text("@\(req.creatorId)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
             }
         }
         .padding(.vertical, 4)
