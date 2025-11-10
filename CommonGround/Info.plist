@@ -1,14 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" 
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
-<dict>
-    <!-- This is required for location permission prompt -->
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>We use your location to show nearby community places where you can connect.</string>
-
-    <!-- Optional: improves compatibility if you ever want background updates -->
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>We use your location to show nearby community places where you can connect.</string>
-</dict>
+<dict/>
 </plist>

@@ -98,6 +98,10 @@ struct HelpCenterView: View {
 
                 }
             }
+            .refreshable {          // 👈 add this modifier here
+                print("🔄 Pull-to-refresh -> fetching latest requests")
+                manager.fetchRequests()
+            }
             .navigationTitle("Help Center")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
